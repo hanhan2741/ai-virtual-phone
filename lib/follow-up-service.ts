@@ -180,7 +180,7 @@ export function scheduleFollowUp(sessionId: string, count: number, stateValues?:
     const userText = lastUserMsg?.content || "";
     const textToMatch = `${assistantText} ${userText}`;
 
-    const isPromiseContext = /(到家|回家|下地库|开车|洗澡|洗漱|开会|上课|下课|吃饭|干饭|点外卖|运动|健身|先忙|等会聊|到了说|到家说|路上慢点)/i;
+    const isPromiseContext = /(到家|回家|下地库|开车|洗澡|洗漱|开会|上课|下课|吃饭|干饭|点外卖|煎牛排|进厨房|做饭|做菜|做饭去|运动|健身|先忙|等会聊|到了说|到家说|路上慢点|吃完|弄完|去忙)/i;
     const hasPromise = isPromiseContext.test(assistantText) || (isPromiseContext.test(userText) && /(好|行|嗯|没问题|等我|晚点)/.test(assistantText));
 
     let delaySec: number;
@@ -235,7 +235,7 @@ export function scheduleFollowUp(sessionId: string, count: number, stateValues?:
         delaySec = Math.round(config.anxietyMaxDelay + t * (config.anxietyMinDelay - config.anxietyMaxDelay));
     }
     const fireAt = Date.now() + delaySec * 1000;
-    console.log(`[FollowUp] Anxiety-driven: value=${anxietyEntry.value}, delay=${delaySec}s, session=${sessionId}, count=${count}`);
+    console.log(`[FollowUp] Scheduled delay: ${delaySec}s, session=${sessionId}, count=${count}`);
     saveFollowUpSchedule({ sessionId, fireAt, count, delaySec });
     // 离线推送兜底：把本轮追问的完整请求快照预约到服务端，App 被杀时由服务端接管
     void armFollowUpBailout(sessionId, count, delaySec, fireAt);
@@ -502,13 +502,21 @@ async function fireFollowUp(sched: { sessionId: string; count: number; delaySec?
 
         const nowMs = Date.now();
         const finalSilenceSec = Math.round((nowMs - lastUserTime) / 1000);
+        // 判断是否是日常待办/约定场景的完成报备
+        const historyText = latestMessages.slice(-6).map(m => m.content).join(" ");
+        const isRoutinePromise = /(到家|回家|下地库|开车|洗澡|洗漱|开会|上课|下课|吃饭|干饭|点外卖|进厨房|煎牛排|做饭)/i.test(historyText);
+
+        const promptHint = isRoutinePromise
+            ? `[系统事件：距你上次发消息说去办事/吃饭/洗澡/开车/到家已过去约${Math.round(finalSilenceSec / 60)}分钟，你现在已经办完/吃完/到家了。请以{{char}}的口吻自然地主动发消息向对方报备或开启新的闲聊。如果对方没有新回复，请直接主动说你刚做完这件事/刚吃完/刚到家，禁止输出空消息或静默。]`
+            : `[对方没有回复你的消息，距上次回复已过约${finalSilenceSec}秒]`;
+
         const messagesWithHint: ChatMessage[] = [
             ...annotatedMessages,
             {
                 id: `_silence_${nowMs}`,
                 sessionId: session.id,
                 role: "system",
-                content: `[对方没有回复你的消息，距上次回复已过约${finalSilenceSec}秒]`,
+                content: promptHint,
                 status: "sent",
                 createdAt: new Date().toISOString(),
             },
