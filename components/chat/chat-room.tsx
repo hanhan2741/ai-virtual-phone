@@ -5369,30 +5369,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const editingMessage = editingMessageId ? messages.find(m => m.id === editingMessageId) : null;
     const editingSystemInstruction = editingMessage ? isSystemInstructionMessage(editingMessage) : false;
 
-    if (showVoiceCall) {
-        if (session.isGroup && groupCharacters.length > 0) {
-            return (
-                <GroupCallScreen
-                    type="voice"
-                    session={session}
-                    characters={groupCharacters}
-                    initiator={callInitiator}
-                    initiatorName={callInitiatorName}
-                    onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
-                />
-            );
-        }
-        if (character) {
-            return (
-                <VoiceCallScreen
-                    session={session}
-                    character={character}
-                    initiator={callInitiator}
-                    onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
-                />
-            );
-        }
-    }
+    // 保留通话在聊天室内部作为顶层浮层挂载，而不是通过 return 替换整个聊天室，
+    // 这样开启小窗模式后，底层的真实聊天页面完全显露并可正常操作！
 
     if (showVideoCall) {
         if (session.isGroup && groupCharacters.length > 0) {
@@ -6744,6 +6722,27 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         ) : chatToast}
                     </div>
                 </div>
+            )}
+
+            {/* Voice Call Layer — 作为聊天室顶层浮层挂载，小窗时底层聊天室完全可用 */}
+            {showVoiceCall && (
+                session.isGroup && groupCharacters.length > 0 ? (
+                    <GroupCallScreen
+                        type="voice"
+                        session={session}
+                        characters={groupCharacters}
+                        initiator={callInitiator}
+                        initiatorName={callInitiatorName}
+                        onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
+                    />
+                ) : character ? (
+                    <VoiceCallScreen
+                        session={session}
+                        character={character}
+                        initiator={callInitiator}
+                        onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
+                    />
+                ) : null
             )}
 
         </div >

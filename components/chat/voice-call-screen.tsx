@@ -709,14 +709,14 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
 
             {/* Content wrapper — force white text so themes don't override call UI */}
             <div className="voicecall-controls gcall-body">
-                {/* Top: Duration + Status + Minimize Button */}
+                {/* Top: Duration + Status + Minimize Button (放在右上角，不遮挡音量键) */}
                 <div className="gcall-topbar relative">
                     {callState !== "CONNECTING" && callState !== "ENDED" && (
                         <button
                             type="button"
                             onClick={() => setIsMinimized(true)}
-                            className="absolute left-4 top-2 text-white p-2.5 rounded-full transition-transform active:scale-95 shadow-lg flex items-center justify-center cursor-pointer"
-                            style={{ background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255, 255, 255, 0.3)", backdropFilter: "blur(10px)", zIndex: 50 }}
+                            className="absolute right-4 top-2 text-white p-2.5 rounded-full transition-transform active:scale-95 shadow-lg flex items-center justify-center cursor-pointer"
+                            style={{ background: "rgba(0, 0, 0, 0.45)", border: "1px solid rgba(255, 255, 255, 0.3)", backdropFilter: "blur(10px)", zIndex: 50 }}
                             title="缩小为悬浮小窗"
                             aria-label="缩小为悬浮小窗"
                         >
@@ -854,31 +854,15 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
                     style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
                 >
                     {callState !== "ENDED" && callState !== "CONNECTING" && (
-                        <>
-                            <button
-                                onClick={() => setIsMinimized(true)}
-                                className="ui-call-btn ui-call-btn-muted"
-                                title="悬浮小窗"
-                                aria-label="悬浮小窗"
-                                style={{ background: "rgba(255, 255, 255, 0.18)", backdropFilter: "blur(8px)" }}
-                            >
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="4 14 10 14 10 20"></polyline>
-                                    <polyline points="20 10 14 10 14 4"></polyline>
-                                    <line x1="14" y1="10" x2="21" y2="3"></line>
-                                    <line x1="3" y1="21" x2="10" y2="14"></line>
-                                </svg>
-                            </button>
-                            <button
-                                onClick={() => setShowLullabyModal(true)}
-                                className="ui-call-btn ui-call-btn-muted"
-                                title="哄睡模式"
-                                aria-label="哄睡模式"
-                                style={{ background: "rgba(255, 255, 255, 0.18)", backdropFilter: "blur(8px)" }}
-                            >
-                                <span style={{ fontSize: "1.15rem" }}>🌙</span>
-                            </button>
-                        </>
+                        <button
+                            onClick={() => setShowLullabyModal(true)}
+                            className="ui-call-btn ui-call-btn-muted"
+                            title="哄睡模式"
+                            aria-label="哄睡模式"
+                            style={{ background: "rgba(255, 255, 255, 0.18)", backdropFilter: "blur(8px)" }}
+                        >
+                            <span style={{ fontSize: "1.15rem" }}>🌙</span>
+                        </button>
                     )}
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
