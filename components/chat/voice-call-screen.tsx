@@ -122,7 +122,37 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         return () => { resumeKeepAliveAfterCall(); };
     }, []);
 
-    // 通话期间周期性取消后台追问/冷场预约，防止通话中途服务端/本地后台误发消息
+    // 1. 屏幕常亮保活（Screen WakeLock）：防止通话/哄睡长篇播放时手机自动变暗熄屏
+    useEffect(() => {
+        let wakeLock: any = null;
+        const requestWakeLock = async () => {
+            try {
+                if ("wakeLock" in navigator && (navigator as any).wakeLock) {
+                    wakeLock = await (navigator as any).wakeLock.request("screen");
+                }
+            } catch (err) {
+                console.log("[VoiceCall] WakeLock error:", err);
+            }
+        };
+        void requestWakeLock();
+
+        const handleVisibility = () => {
+            if (document.visibilityState === "visible" && stateRef.current !== "ENDED") {
+                void requestWakeLock();
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibility);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibility);
+            if (wakeLock) {
+                wakeLock.release().catch(() => {});
+                wakeLock = null;
+            }
+        };
+    }, []);
+
+    // 2. 通话期间周期性取消后台追问/冷场预约，防止通话中途服务端/本地后台误发消息
     useEffect(() => {
         cancelFollowUp(session.id);
         const suppressTimer = setInterval(() => {
@@ -389,6 +419,15 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     if (stateRef.current === "ENDED") return;
 
                     if (audioBlob) {
+                        // 注册锁屏系统媒体控制（MediaSession），让熄屏/锁屏后音频通道依然保持播放
+                        if ("mediaSession" in navigator && typeof window !== "undefined") {
+                            navigator.mediaSession.metadata = new MediaMetadata({
+                                title: `与 ${character.name} 语音通话中`,
+                                artist: character.name,
+                                album: "AI 虚拟小手机",
+                                artwork: character.avatar ? [{ src: character.avatar, sizes: "512x512", type: "image/png" }] : [],
+                            });
+                        }
                         const { promise, abort } = playCallAudio(audioBlob);
                         audioAbortRef.current = abort;
                         await promise;
