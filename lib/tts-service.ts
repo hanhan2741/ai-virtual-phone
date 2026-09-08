@@ -433,11 +433,20 @@ export function playAudioBlob(blob: Blob): { promise: Promise<void>; abort: () =
                 if (settled) return;
                 source = ctx.createBufferSource();
                 source.buffer = audioBuffer;
+                // 动态压缩器（DynamicsCompressor）：自动平滑声音动态范围，消除音频忽大忽小
+                const compressor = ctx.createDynamicsCompressor();
+                compressor.threshold.setValueAtTime(-24, ctx.currentTime);
+                compressor.knee.setValueAtTime(30, ctx.currentTime);
+                compressor.ratio.setValueAtTime(12, ctx.currentTime);
+                compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+                compressor.release.setValueAtTime(0.25, ctx.currentTime);
+
                 // Route through a gain node so the in-app volume slider applies.
                 gain = ctx.createGain();
                 gain.gain.value = _ttsVolume;
                 source.connect(gain);
-                gain.connect(ctx.destination);
+                gain.connect(compressor);
+                compressor.connect(ctx.destination);
                 _activeGain = gain;
                 source.onended = finalize;
                 source.start();

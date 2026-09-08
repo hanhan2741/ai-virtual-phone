@@ -696,7 +696,7 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
 
     return (
         <div
-            className="absolute inset-0 z-[100] flex flex-col text-white overflow-hidden call-bg-default call-keyboard-shift"
+            className="fixed inset-0 z-[1000] w-full h-full min-h-[100dvh] flex flex-col text-white overflow-hidden call-bg-default call-keyboard-shift"
             style={bgImageResolved ? { ...keyboardOffsetStyle, background: `url(${bgImageResolved}) center/cover no-repeat` } : keyboardOffsetStyle}
         >
             {/* Dark overlay for readability */}
