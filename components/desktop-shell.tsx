@@ -103,6 +103,9 @@ import {
   resolveActiveIconSkins,
   type ThemeProfile
 } from "@/lib/theme-types";
+import { useGlobalCall } from "@/lib/call-context";
+import { VoiceCallScreen } from "@/components/chat/voice-call-screen";
+import { GroupCallScreen } from "@/components/chat/group-call-screen";
 import { GRID_COLS, GRID_ROWS, WIDGET_SIZE_CELLS, WIDGET_CATALOG, type WidgetInstance, type WidgetType } from "@/lib/widget-types";
 import { buildOccupancyGrid, canPlaceWidget, placeWidget, createDefaultWidgets, loadWidgets, saveWidgets, loadDIYTemplates, saveDIYTemplates } from "@/lib/widget-storage";
 import {
@@ -5034,6 +5037,36 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       </section>
       {/* 微信云同步过程可视化：拉取/上传/运行包同步与失败都在这里冒 toast */}
       <WeixinSyncToast />
+      <GlobalCallLayer />
     </>
   );
+}
+
+function GlobalCallLayer() {
+  const { activeCall, endCall } = useGlobalCall();
+  if (!activeCall) return null;
+
+  if (activeCall.type === "voice") {
+    if (activeCall.session.isGroup) {
+      return (
+        <GroupCallScreen
+          type="voice"
+          session={activeCall.session}
+          characters={[]}
+          initiator={activeCall.initiator}
+          initiatorName={activeCall.initiatorName}
+          onEnd={endCall}
+        />
+      );
+    }
+    return (
+      <VoiceCallScreen
+        session={activeCall.session}
+        character={activeCall.character}
+        initiator={activeCall.initiator}
+        onEnd={endCall}
+      />
+    );
+  }
+  return null;
 }

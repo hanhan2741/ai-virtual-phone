@@ -39,6 +39,7 @@ import { ChatSettingsPanel } from "./chat-settings-panel";
 import { VoiceCallScreen } from "./voice-call-screen";
 import { VideoCallScreen } from "./video-call-screen";
 import { GroupCallScreen } from "./group-call-screen";
+import { useGlobalCall } from "@/lib/call-context";
 import { TransferTargetModal } from "./transfer-target-modal";
 import { GiftPickerModal } from "./gift-picker-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
@@ -1122,6 +1123,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showVoiceCall, setShowVoiceCall] = useState(false);
+    const { startCall: triggerGlobalCall } = useGlobalCall();
     const [showVideoCall, setShowVideoCall] = useState(false);
     const [callInitiator, setCallInitiator] = useState<"user" | "character">("user");
     const [callInitiatorName, setCallInitiatorName] = useState<string>("");
@@ -6247,7 +6249,18 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 	                onOpenRichModal={(modal) => { setShowPlusMenu(false); setRichModal(modal); }}
                 onOpenCustomPlusAction={handleOpenCustomPlusAction}
                 onStartVideoCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVideoCall(true); }}
-                onStartVoiceCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVoiceCall(true); }}
+                onStartVoiceCall={() => {
+                    cancelFollowUp(session.id);
+                    setShowPlusMenu(false);
+                    if (character) {
+                        triggerGlobalCall({
+                            session,
+                            character,
+                            type: "voice",
+                            initiator: "user",
+                        });
+                    }
+                }}
                 onSendText={handleSendText}
                 onStopGeneration={clearStuckGeneration}
                 onTriggerAIResponse={triggerAIResponse}
@@ -6724,26 +6737,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 </div>
             )}
 
-            {/* Voice Call Layer — 作为聊天室顶层浮层挂载，小窗时底层聊天室完全可用 */}
-            {showVoiceCall && (
-                session.isGroup && groupCharacters.length > 0 ? (
-                    <GroupCallScreen
-                        type="voice"
-                        session={session}
-                        characters={groupCharacters}
-                        initiator={callInitiator}
-                        initiatorName={callInitiatorName}
-                        onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
-                    />
-                ) : character ? (
-                    <VoiceCallScreen
-                        session={session}
-                        character={character}
-                        initiator={callInitiator}
-                        onEnd={() => returnFromCall(() => setShowVoiceCall(false))}
-                    />
-                ) : null
-            )}
+            {/* Voice Call 已提升为全局顶层挂载（GlobalCallLayer） */}
 
         </div >
     );

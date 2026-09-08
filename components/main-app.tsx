@@ -11,6 +11,7 @@ import { DesktopShell } from "./desktop-shell";
 import { OfflinePushRevampAnnouncement } from "./offline-push-revamp-announcement";
 import { SplashAnimation } from "./splash-animation";
 import { MusicProvider } from "@/lib/music-context";
+import { CallProvider } from "@/lib/call-context";
 import { hydrateKvDb, isKvHydrated } from "@/lib/kv-db";
 import { getThemeAssetMap, readThemeProfile } from "@/lib/theme-storage";
 import { resolveActiveIconSkins, type ThemeProfile } from "@/lib/theme-types";
@@ -312,16 +313,18 @@ export function MainApp() {
         <SplashScreen ready={hydrated} onEnter={() => setSplashDismissed(true)} />
       ) : (
         <main className="app-root">
-          <MusicProvider>
-            <DesktopShell
-              initialThemeProfile={preparedDesktopTheme?.profile}
-              initialThemeAssets={preparedDesktopTheme?.assets}
-            />
-            <OfflinePushRevampAnnouncement />
-            <CloudBackupScheduler />
-            <RealityBridgeScheduler />
-            <MediaMaintenanceScheduler />
-          </MusicProvider>
+          <CallProvider>
+            <MusicProvider>
+              <DesktopShell
+                initialThemeProfile={preparedDesktopTheme?.profile}
+                initialThemeAssets={preparedDesktopTheme?.assets}
+              />
+              <OfflinePushRevampAnnouncement />
+              <CloudBackupScheduler />
+              <RealityBridgeScheduler />
+              <MediaMaintenanceScheduler />
+            </MusicProvider>
+          </CallProvider>
         </main>
       )}
     </AccountGate>
