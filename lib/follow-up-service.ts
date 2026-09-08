@@ -171,32 +171,69 @@ export function stopFollowUpService() {
 export function scheduleFollowUp(sessionId: string, count: number, stateValues?: StateValue[]) {
     const config = loadFollowUpConfig();
 
-    if (!stateValues || stateValues.length === 0) {
-        console.log(`[FollowUp] No state values, not scheduling.`);
-        clearFollowUpSchedule(sessionId);
-        cancelFollowUpBailout(sessionId);
-        return;
-    }
+    // 1. 优先检测：日常待办 / 状态报备约定（按不同生活场景智能匹配专属时长）
+    const messages = loadChatMessages(sessionId);
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant");
+    const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
 
-    const anxietyEntry = stateValues.find(sv => sv.name === config.anxietyFieldName);
-    if (!anxietyEntry) {
-        console.log(`[FollowUp] No "${config.anxietyFieldName}" field found, not scheduling.`);
-        clearFollowUpSchedule(sessionId);
-        cancelFollowUpBailout(sessionId);
-        return;
-    }
+    const assistantText = lastAssistantMsg?.content || "";
+    const userText = lastUserMsg?.content || "";
+    const textToMatch = `${assistantText} ${userText}`;
 
-    if (anxietyEntry.value < config.anxietyThreshold) {
-        console.log(`[FollowUp] Anxiety ${anxietyEntry.value} < threshold ${config.anxietyThreshold}, not scheduling.`);
-        clearFollowUpSchedule(sessionId);
-        cancelFollowUpBailout(sessionId);
-        return;
-    }
+    const isPromiseContext = /(到家|回家|下地库|开车|洗澡|洗漱|开会|上课|下课|吃饭|干饭|点外卖|运动|健身|先忙|等会聊|到了说|到家说|路上慢点)/i;
+    const hasPromise = isPromiseContext.test(assistantText) || (isPromiseContext.test(userText) && /(好|行|嗯|没问题|等我|晚点)/.test(assistantText));
 
-    // Linear interpolation: threshold → maxDelay, 100 → minDelay
-    const range = 100 - config.anxietyThreshold;
-    const t = range > 0 ? (anxietyEntry.value - config.anxietyThreshold) / range : 1;
-    const delaySec = Math.round(config.anxietyMaxDelay + t * (config.anxietyMinDelay - config.anxietyMaxDelay));
+    let delaySec: number;
+
+    if (hasPromise && count === 0) {
+        const session = loadChatSessions().find(s => s.id === sessionId);
+        let minMin = 20;
+        let maxMin = 30;
+
+        if (/(下地库|开车|路上|到家|回家|返程|通勤)/i.test(textToMatch)) {
+            // ① 开车/下班/到家通勤：使用你在设置里配的 30~40 分钟（可自由调节）
+            minMin = (session as any)?.promiseMinMinutes ?? (config as any).promiseMinMinutes ?? 30;
+            maxMin = (session as any)?.promiseMaxMinutes ?? (config as any).promiseMaxMinutes ?? 40;
+        } else if (/(洗澡|洗漱|洗头|吹头发|冲凉)/i.test(textToMatch)) {
+            // ② 洗澡/洗漱：12~20 分钟
+            minMin = 12;
+            maxMin = 20;
+        } else if (/(吃饭|吃个饭|吃午饭|吃晚饭|干饭|点外卖|做饭|煮面)/i.test(textToMatch)) {
+            // ③ 吃饭：15~25 分钟（吃完很快就会主动发消息）
+            minMin = 15;
+            maxMin = 25;
+        } else if (/(开会|讨论|上课|自习|写作业|复习)/i.test(textToMatch)) {
+            // ④ 开会/上课：35~50 分钟
+            minMin = 35;
+            maxMin = 50;
+        } else if (/(运动|健身|夜跑|跑步|打球|游泳)/i.test(textToMatch)) {
+            // ⑤ 运动健身：40~55 分钟
+            minMin = 40;
+            maxMin = 55;
+        } else {
+            // ⑥ 其他琐事（先忙了、等会聊）：10~20 分钟
+            minMin = 10;
+            maxMin = 20;
+        }
+
+        const minSec = Math.min(minMin, maxMin) * 60;
+        const maxSec = Math.max(minMin, maxMin) * 60;
+        delaySec = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+        console.log(`[FollowUp] Scene-based routine matched (${minMin}~${maxMin}min), delay=${delaySec}s for session: ${sessionId}`);
+    } else {
+        // 2. 常规焦虑驱动追问判定
+        const anxietyEntry = stateValues?.find(sv => sv.name === config.anxietyFieldName);
+        if (!anxietyEntry || anxietyEntry.value < config.anxietyThreshold) {
+            console.log(`[FollowUp] No promise and anxiety below threshold, not scheduling.`);
+            clearFollowUpSchedule(sessionId);
+            cancelFollowUpBailout(sessionId);
+            return;
+        }
+
+        const range = 100 - config.anxietyThreshold;
+        const t = range > 0 ? (anxietyEntry.value - config.anxietyThreshold) / range : 1;
+        delaySec = Math.round(config.anxietyMaxDelay + t * (config.anxietyMinDelay - config.anxietyMaxDelay));
+    }
     const fireAt = Date.now() + delaySec * 1000;
     console.log(`[FollowUp] Anxiety-driven: value=${anxietyEntry.value}, delay=${delaySec}s, session=${sessionId}, count=${count}`);
     saveFollowUpSchedule({ sessionId, fireAt, count, delaySec });
