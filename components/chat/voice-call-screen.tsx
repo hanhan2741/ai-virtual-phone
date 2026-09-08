@@ -87,6 +87,13 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [lullabyLength, setLullabyLength] = useState("5000");
     const [lullabyCustomPrompt, setLullabyCustomPrompt] = useState("");
 
+    // 悬浮小窗 / 画中画模式状态
+    const [isMinimized, setIsMinimized] = useState(false);
+    const [miniPos, setMiniPos] = useState({ x: 20, y: 80 });
+    const dragRef = useRef<{ startX: number; startY: number; posX: number; posY: number; isDragging: boolean }>({
+        startX: 0, startY: 0, posX: 20, posY: 80, isDragging: false
+    });
+
     const sttRef = useRef<STTSession | null>(null);
     const audioAbortRef = useRef<(() => void) | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -609,7 +616,71 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
         setTimeout(() => onEnd(), 1500);
     }, [session.id, callDuration, onEnd]);
 
+    // ── 小窗拖拽处理 ──
+    const handleMiniPointerDown = (e: React.PointerEvent) => {
+        dragRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            posX: miniPos.x,
+            posY: miniPos.y,
+            isDragging: false,
+        };
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    };
+
+    const handleMiniPointerMove = (e: React.PointerEvent) => {
+        const dx = e.clientX - dragRef.current.startX;
+        const dy = e.clientY - dragRef.current.startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            dragRef.current.isDragging = true;
+            setMiniPos({
+                x: Math.max(10, Math.min(window.innerWidth - 120, dragRef.current.posX + dx)),
+                y: Math.max(40, Math.min(window.innerHeight - 150, dragRef.current.posY + dy)),
+            });
+        }
+    };
+
+    const handleMiniPointerUp = (e: React.PointerEvent) => {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        if (!dragRef.current.isDragging) {
+            setIsMinimized(false);
+        }
+    };
+
     // ── Render ──────────────────────────────────────
+
+    if (isMinimized && callState !== "ENDED") {
+        return (
+            <div
+                className="fixed z-[1000] cursor-pointer select-none"
+                style={{
+                    left: `${miniPos.x}px`,
+                    top: `${miniPos.y}px`,
+                    touchAction: "none",
+                }}
+                onPointerDown={handleMiniPointerDown}
+                onPointerMove={handleMiniPointerMove}
+                onPointerUp={handleMiniPointerUp}
+            >
+                <div className="relative flex items-center gap-2.5 px-3 py-2 rounded-2xl bg-black/85 backdrop-blur-md border border-white/20 shadow-2xl text-white">
+                    <div className="relative w-9 h-9 rounded-full overflow-hidden shrink-0 border border-white/30 bg-neutral-800">
+                        {character.avatar ? (
+                            <img src={character.avatar} alt={character.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs font-bold">{character.name?.[0]}</div>
+                        )}
+                        {callState === "AI_SPEAKING" && (
+                            <div className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ping opacity-75" />
+                        )}
+                    </div>
+                    <div className="flex flex-col pr-1 min-w-[65px]">
+                        <span className="text-xs font-semibold leading-tight truncate max-w-[85px]">{character.name}</span>
+                        <span className="text-[10px] text-emerald-400 font-mono leading-tight">{formatTime(callDuration)}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div
@@ -626,8 +697,24 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
 
             {/* Content wrapper — force white text so themes don't override call UI */}
             <div className="voicecall-controls gcall-body">
-                {/* Top: Duration + Status */}
-                <div className="gcall-topbar">
+                {/* Top: Duration + Status + Minimize Button */}
+                <div className="gcall-topbar relative">
+                    {callState !== "CONNECTING" && callState !== "ENDED" && (
+                        <button
+                            type="button"
+                            onClick={() => setIsMinimized(true)}
+                            className="absolute left-4 top-3 text-white/80 hover:text-white p-2 rounded-full bg-white/10 backdrop-blur-sm transition-all"
+                            title="缩小为悬浮小窗"
+                            aria-label="缩小为悬浮小窗"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="4 14 10 14 10 20"></polyline>
+                                <polyline points="20 10 14 10 14 4"></polyline>
+                                <line x1="14" y1="10" x2="21" y2="3"></line>
+                                <line x1="3" y1="21" x2="10" y2="14"></line>
+                            </svg>
+                        </button>
+                    )}
                     <div className="gcall-topbar-title">
                         {character.name}
                     </div>
