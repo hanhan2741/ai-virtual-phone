@@ -81,6 +81,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [bgImageResolved, setBgImageResolved] = useState<string | null>(null);
     const [showSttWarning, setShowSttWarning] = useState(false);
 
+    // 哄睡弹窗与配置状态
+    const [showLullabyModal, setShowLullabyModal] = useState(false);
+    const [lullabyPlot, setLullabyPlot] = useState("");
+    const [lullabyLength, setLullabyLength] = useState("5000");
+    const [lullabyCustomPrompt, setLullabyCustomPrompt] = useState("");
+
     const sttRef = useRef<STTSession | null>(null);
     const audioAbortRef = useRef<(() => void) | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -549,6 +555,26 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         },
     });
 
+    // ── 哄睡专属请求 ─────────────────────────────────
+    const handleStartLullaby = useCallback(async () => {
+        setShowLullabyModal(false);
+        const plot = lullabyPlot.trim() || "在静谧的夜晚陪伴用户，给用户讲一段舒缓、安详的长篇睡前故事";
+        const wordCount = lullabyLength || "5000";
+        const customPrompt = lullabyCustomPrompt.trim();
+
+        // 构造用户发起的哄睡指令（严守人设，但剧情严格按照用户设定的内容推进）
+        const promptInstruction = `[系统指令：用户请求你进行深度睡前哄睡。
+【核心要求】：
+1. 保持你原本的性格、人设特征和对用户的专属态度、称呼不变。
+2. 哄睡剧情严格按照用户指定的内容来深度展开，不要简略跳过，充分展开场景细节与故事脉络：
+“${plot}”
+3. 输出字数请充分展开，目标字数约为 ${wordCount} 字左右（篇幅充实、细节丰富）。
+4. 语气请放缓、轻柔、温暖、极具陪伴感与沉浸感，像在枕边轻声细语耳语一样说话，去掉一切大声叫喊或惊叹标点。
+${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
+
+        void runConversationTurn(promptInstruction);
+    }, [lullabyPlot, lullabyLength, lullabyCustomPrompt, runConversationTurn]);
+
     // ── Hangup ──────────────────────────────────────
 
     const handleHangup = useCallback(() => {
@@ -724,9 +750,20 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 
                 {/* Bottom controls */}
                 <div
-                    className="flex justify-center items-center gap-[40px] p-5"
+                    className="flex justify-center items-center gap-[24px] p-5"
                     style={{ paddingBottom: "max(30px, env(safe-area-inset-bottom))" }}
                 >
+                    {callState !== "ENDED" && callState !== "CONNECTING" && (
+                        <button
+                            onClick={() => setShowLullabyModal(true)}
+                            className="ui-call-btn ui-call-btn-muted"
+                            title="哄睡模式"
+                            aria-label="哄睡模式"
+                            style={{ background: "rgba(255, 255, 255, 0.15)", backdropFilter: "blur(8px)" }}
+                        >
+                            <span style={{ fontSize: "1.15rem" }}>🌙</span>
+                        </button>
+                    )}
                     {callState !== "ENDED" && callState !== "CONNECTING" ? holdToTalk ? (
                         <>
                             {/* 输入方式切换（按住说话模式不需要持续开麦，静音位改放 Aa 切换） */}
@@ -914,6 +951,102 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                     onClose={() => setShowSttWarning(false)}
                     onNeverShow={handleNeverShowSttWarning}
                 />
+            )}
+
+            {/* 哄睡设置弹窗 */}
+            {showLullabyModal && (
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    style={{ background: "rgba(0, 0, 0, 0.65)", backdropFilter: "blur(6px)" }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowLullabyModal(false); }}
+                >
+                    <div
+                        className="w-full max-w-[340px] rounded-2xl p-5 text-white flex flex-col gap-4 shadow-2xl"
+                        style={{ background: "rgba(30, 32, 42, 0.95)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+                    >
+                        <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                            <div className="flex items-center gap-2 font-semibold text-base">
+                                <span>🌙</span>
+                                <span>哄睡模式设置</span>
+                            </div>
+                            <button
+                                onClick={() => setShowLullabyModal(false)}
+                                className="text-white/60 hover:text-white text-lg p-1"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/80 font-medium">想要推进的剧情 / 故事内容：</label>
+                            <textarea
+                                value={lullabyPlot}
+                                onChange={(e) => setLullabyPlot(e.target.value)}
+                                placeholder="输入你想听的剧情（例如：我们在森林小木屋烤火听雨，回忆过去的事情……）"
+                                rows={3}
+                                className="w-full text-xs p-2.5 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:border-indigo-400 placeholder:text-white/35 resize-none text-white"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/80 font-medium">字数设置（支持长篇）：</label>
+                            <div className="grid grid-cols-4 gap-1.5 mb-1">
+                                {[
+                                    { label: "500字", val: "500" },
+                                    { label: "1000字", val: "1000" },
+                                    { label: "3000字", val: "3000" },
+                                    { label: "5000字", val: "5000" },
+                                ].map((item) => (
+                                    <button
+                                        key={item.val}
+                                        type="button"
+                                        onClick={() => setLullabyLength(item.val)}
+                                        className={`py-1 text-xs rounded-lg transition-all ${lullabyLength === item.val ? "bg-indigo-600 text-white font-semibold" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-2 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/10">
+                                <span className="text-xs text-white/60">自定义字数:</span>
+                                <input
+                                    type="number"
+                                    value={lullabyLength}
+                                    onChange={(e) => setLullabyLength(e.target.value)}
+                                    placeholder="5000"
+                                    className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                                />
+                                <span className="text-xs text-white/60">字</span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/80 font-medium">额外补充要求（可选）：</label>
+                            <input
+                                type="text"
+                                value={lullabyCustomPrompt}
+                                onChange={(e) => setLullabyCustomPrompt(e.target.value)}
+                                placeholder="如：语速放慢、多一些呼吸声……"
+                                className="w-full text-xs p-2 rounded-lg bg-white/10 border border-white/10 focus:outline-none focus:border-indigo-400 placeholder:text-white/35 text-white"
+                            />
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                            <button
+                                onClick={() => setShowLullabyModal(false)}
+                                className="flex-1 py-2 text-xs rounded-xl bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleStartLullaby}
+                                className="flex-1 py-2 text-xs rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-500/30 transition-colors"
+                            >
+                                开启长篇哄睡 ✨
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>
