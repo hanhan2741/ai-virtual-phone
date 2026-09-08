@@ -95,10 +95,11 @@ async function resolveReadingInput(
         ? identities.find(i => i.id === userIdentityId) || identities[0]
         : identities[0] || null;
 
-    // Memory
+    // Memory - 结合书名、章节名以及精选正文前段进行深度记忆检索，增强记忆命中率
     const memConfig = loadMemoryConfig();
     const coreMemories = await retrieveCoreMemoriesForPrompt(characterId, memConfig);
-    const longTermMemories = await retrieveMemoriesForPrompt(characterId, options.bookTitle, memConfig);
+    const memoryQuery = `${options.bookTitle} ${options.chapterTitle} ${options.chapterContent.slice(0, 100)}`.trim();
+    const longTermMemories = await retrieveMemoriesForPrompt(characterId, memoryQuery, memConfig);
 
     // Short-term context
     const { recentBlocks, truncatedHistory, unifiedRecentItems } = prepareShortTermContext(characterId, "chat", {
