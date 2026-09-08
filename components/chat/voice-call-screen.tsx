@@ -86,6 +86,8 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
     const [lullabyPlot, setLullabyPlot] = useState("");
     const [lullabyLength, setLullabyLength] = useState("5000");
     const [lullabyCustomPrompt, setLullabyCustomPrompt] = useState("");
+    const [lullabyAutoHangupMinutes, setLullabyAutoHangupMinutes] = useState("30");
+    const autoHangupTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // 悬浮小窗 / 画中画模式状态
     const [isMinimized, setIsMinimized] = useState(false);
@@ -620,6 +622,20 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         const wordCount = lullabyLength || "5000";
         const customPrompt = lullabyCustomPrompt.trim();
 
+        // 设定定时自动挂断
+        if (autoHangupTimerRef.current) {
+            clearTimeout(autoHangupTimerRef.current);
+            autoHangupTimerRef.current = null;
+        }
+        const autoMins = parseInt(lullabyAutoHangupMinutes, 10);
+        if (Number.isFinite(autoMins) && autoMins > 0) {
+            autoHangupTimerRef.current = setTimeout(() => {
+                if (stateRef.current !== "ENDED") {
+                    handleHangup();
+                }
+            }, autoMins * 60 * 1000);
+        }
+
         // 构造用户发起的哄睡指令（严守人设，但剧情严格按照用户设定的内容推进）
         const promptInstruction = `[系统指令：用户请求你进行深度睡前哄睡。
 【核心要求】：
@@ -631,11 +647,15 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
 ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
 
         void runConversationTurn(promptInstruction);
-    }, [lullabyPlot, lullabyLength, lullabyCustomPrompt, runConversationTurn]);
+    }, [lullabyPlot, lullabyLength, lullabyCustomPrompt, lullabyAutoHangupMinutes, runConversationTurn]);
 
     // ── Hangup ──────────────────────────────────────
 
     const handleHangup = useCallback(() => {
+        if (autoHangupTimerRef.current) {
+            clearTimeout(autoHangupTimerRef.current);
+            autoHangupTimerRef.current = null;
+        }
         setCallState("ENDED");
 
         // Stop any ongoing STT
@@ -1168,6 +1188,38 @@ ${customPrompt ? `5. 补充要求：${customPrompt}` : ""}]`;
                                 placeholder="如：语速放慢、多一些呼吸声……"
                                 className="w-full text-xs p-2 rounded-lg bg-white/10 border border-white/10 focus:outline-none focus:border-indigo-400 placeholder:text-white/35 text-white"
                             />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs text-white/80 font-medium">⏱ 定时自动挂断（安心入睡）：</label>
+                            <div className="grid grid-cols-4 gap-1.5 mb-1">
+                                {[
+                                    { label: "15分钟", val: "15" },
+                                    { label: "30分钟", val: "30" },
+                                    { label: "60分钟", val: "60" },
+                                    { label: "不自动挂", val: "0" },
+                                ].map((item) => (
+                                    <button
+                                        key={item.val}
+                                        type="button"
+                                        onClick={() => setLullabyAutoHangupMinutes(item.val)}
+                                        className={`py-1 text-xs rounded-lg transition-all ${lullabyAutoHangupMinutes === item.val ? "bg-indigo-600 text-white font-semibold" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-2 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/10">
+                                <span className="text-xs text-white/60">自定义分钟:</span>
+                                <input
+                                    type="number"
+                                    value={lullabyAutoHangupMinutes}
+                                    onChange={(e) => setLullabyAutoHangupMinutes(e.target.value)}
+                                    placeholder="30"
+                                    className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                                />
+                                <span className="text-xs text-white/60">分钟（0为不自动挂断）</span>
+                            </div>
                         </div>
 
                         <div className="flex gap-2 pt-2">
