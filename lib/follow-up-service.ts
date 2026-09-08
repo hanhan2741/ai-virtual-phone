@@ -463,6 +463,17 @@ async function fireFollowUp(sched: { sessionId: string; count: number; delaySec?
         return;
     }
 
+    // 正在与该角色语音通话中，严禁后台发消息插嘴打架
+    const session = loadChatSessions().find(s => s.id === sched.sessionId);
+    if (!session) return;
+    const isCallActive = typeof window !== "undefined" && Boolean(document.querySelector(".voicecall-controls, .call-bg-default"));
+    if (isCallActive) {
+        console.log(`[FollowUp] Call active, suppress follow-up for session=${sched.sessionId}`);
+        clearFollowUpSchedule(sched.sessionId);
+        cancelFollowUpBailout(sched.sessionId);
+        return;
+    }
+
     firingSet.add(sched.sessionId);
     clearFollowUpSchedule(sched.sessionId); // clear before firing
 

@@ -122,6 +122,17 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         return () => { resumeKeepAliveAfterCall(); };
     }, []);
 
+    // 通话期间周期性取消后台追问/冷场预约，防止通话中途服务端/本地后台误发消息
+    useEffect(() => {
+        cancelFollowUp(session.id);
+        const suppressTimer = setInterval(() => {
+            if (stateRef.current !== "ENDED") {
+                cancelFollowUp(session.id);
+            }
+        }, 10_000);
+        return () => clearInterval(suppressTimer);
+    }, [session.id]);
+
     // 通话音频会话 + 卸载兜底：不经挂断键退出（返回聊天页/切会话/组件被销毁）时，
     // 把识别、在途播放与音频会话全部释放。此前识别的自动重启循环在卸载后条件
     // 恒成立（stateRef 停在 IDLE），会在后台无限自我重启，麦克风永不归还，
@@ -130,11 +141,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         setCallAudioSessionActive(true);
         return () => {
             stateRef.current = "ENDED";
+            cancelFollowUp(session.id);
             if (sttRef.current) { sttRef.current.abort(); sttRef.current = null; }
             if (audioAbortRef.current) { audioAbortRef.current(); audioAbortRef.current = null; }
             setCallAudioSessionActive(false);
         };
-    }, []);
+    }, [session.id]);
     useEffect(() => { interimTextRef.current = interimText; }, [interimText]);
 
     const showSttCompatibilityWarning = useCallback(() => {
