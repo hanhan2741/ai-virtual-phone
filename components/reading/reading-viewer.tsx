@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from "react";
-import { Bot, ChevronDown, ChevronRight, Languages, Menu, Minus, PenLine, Rocket, SendHorizontal, X, ZoomIn } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Languages, Menu, Minus, PenLine, Rocket, SendHorizontal, Volume2, VolumeX, X, ZoomIn } from "lucide-react";
+import { resolveVoiceConfig, synthesizeSpeech, playAudioBlobViaMediaElement } from "@/lib/tts-service";
 import {
     loadChapters,
     loadProgress,
@@ -331,6 +332,12 @@ export function ReadingViewer({ book, onBack }: Props) {
     const [scrollFraction, setScrollFraction] = useState(0);
     const [flipAnim, setFlipAnim] = useState<{ direction: 'forward' | 'backward'; items: TxtPageItem[] } | null>(null);
 
+    // ── 角色有声朗读状态 ──
+    const [isReadingAloud, setIsReadingAloud] = useState(false);
+    const [aloudStatusText, setAloudStatusText] = useState("");
+    const aloudAbortRef = useRef<(() => void) | null>(null);
+    const isReadingAloudRef = useRef(false);
+
     const [enrichedContacts, setEnrichedContacts] = useState<(ReturnType<typeof loadChatContacts>[number] & { char: Character })[]>([]);
 
     useEffect(() => {
@@ -536,6 +543,111 @@ export function ReadingViewer({ book, onBack }: Props) {
         // 找不到与角色的一对一会话时自动创建（否则发送会静默无响应）
         return createOrGetSession(companionId);
     }, [companionId]);
+
+    // ── 智能语音朗读核心逻辑（引号台词情绪化演绎，非引号旁白沉稳朗读） ──
+    const stopReadAloud = useCallback(() => {
+        isReadingAloudRef.current = false;
+        setIsReadingAloud(false);
+        setAloudStatusText("");
+        if (aloudAbortRef.current) {
+            aloudAbortRef.current();
+            aloudAbortRef.current = null;
+        }
+    }, []);
+
+    const parseParagraphSegments = (text: string) => {
+        const segments: { text: string; isDialogue: boolean; emotion?: string }[] = [];
+        const regex = /(“[^”]+”|"[^"]+"|「[^」]+」)/g;
+        let lastIdx = 0;
+        let match: RegExpExecArray | null;
+
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIdx) {
+                const narration = text.substring(lastIdx, match.index).trim();
+                if (narration) segments.push({ text: narration, isDialogue: false, emotion: "calm" });
+            }
+            const dialogue = match[1].replace(/^[“"「]|[”"」]$/g, "").trim();
+            if (dialogue) {
+                // 情绪启发式推断（感叹号/疑问/特定情绪词）
+                let emotion = "happy";
+                if (/[！!]/.test(dialogue) || /(混蛋|可恶|找死|别管我)/.test(dialogue)) emotion = "angry";
+                else if (/(伤心|哭|难过|救救|叹气|唉)/.test(dialogue)) emotion = "sad";
+                else if (/[？\?]/.test(dialogue) || /(怎么会|居然|难道)/.test(dialogue)) emotion = "surprised";
+                else if (/(害怕|颤抖|恐惧)/.test(dialogue)) emotion = "fearful";
+                segments.push({ text: dialogue, isDialogue: true, emotion });
+            }
+            lastIdx = regex.lastIndex;
+        }
+
+        if (lastIdx < text.length) {
+            const rest = text.substring(lastIdx).trim();
+            if (rest) segments.push({ text: rest, isDialogue: false, emotion: "calm" });
+        }
+
+        return segments;
+    };
+
+    const startReadAloud = useCallback(async () => {
+        if (!companionId) {
+            alert("请先在右下角选择一位陪读角色！");
+            return;
+        }
+        const voiceConfig = resolveVoiceConfig(companionId);
+        if (!voiceConfig) {
+            alert("当前陪读角色尚未在「设置 → 语音设置」中绑定音色！");
+            return;
+        }
+
+        if (isReadingAloudRef.current) {
+            stopReadAloud();
+            return;
+        }
+
+        isReadingAloudRef.current = true;
+        setIsReadingAloud(true);
+
+        const currentCh = chapters[chapterIndex];
+        if (!currentCh || !currentCh.paragraphs || currentCh.paragraphs.length === 0) {
+            setAloudStatusText("当前章节没有可读文本");
+            stopReadAloud();
+            return;
+        }
+
+        try {
+            const paras = currentCh.paragraphs;
+            for (let pIdx = 0; pIdx < paras.length; pIdx++) {
+                if (!isReadingAloudRef.current) break;
+                const pText = paras[pIdx].trim();
+                if (!pText) continue;
+
+                setAloudStatusText(`正在朗读 第${chapterIndex + 1}章 · 第${pIdx + 1}/${paras.length}段`);
+
+                const segments = parseParagraphSegments(pText);
+                for (const seg of segments) {
+                    if (!isReadingAloudRef.current) break;
+                    if (!seg.text.trim()) continue;
+
+                    const audioBlob = await synthesizeSpeech(seg.text, voiceConfig, {
+                        emotion: seg.isDialogue ? seg.emotion : "calm"
+                    });
+
+                    if (!isReadingAloudRef.current) break;
+                    if (audioBlob) {
+                        const { promise, abort } = playAudioBlobViaMediaElement(audioBlob);
+                        aloudAbortRef.current = abort;
+                        await promise;
+                        aloudAbortRef.current = null;
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.warn("[Reading] 朗读中断或失败:", err);
+        } finally {
+            if (isReadingAloudRef.current) {
+                stopReadAloud();
+            }
+        }
+    }, [companionId, chapters, chapterIndex, stopReadAloud]);
 
 
     // Load book data
@@ -2316,6 +2428,15 @@ export function ReadingViewer({ book, onBack }: Props) {
                         >
                             <Bot size={22} strokeWidth={1.7} />
                             <span>自动批注</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`reading-footer-icon-btn ${isReadingAloud ? "is-active" : ""}`}
+                            onClick={startReadAloud}
+                            title={isReadingAloud ? "停止朗读" : "让角色朗读当前章节"}
+                        >
+                            {isReadingAloud ? <VolumeX size={22} strokeWidth={1.7} /> : <Volume2 size={22} strokeWidth={1.7} />}
+                            <span>{isReadingAloud ? "暂停朗读" : "角色朗读"}</span>
                         </button>
                         <button
                             type="button"
