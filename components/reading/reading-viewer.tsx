@@ -562,18 +562,30 @@ export function ReadingViewer({ book, onBack }: Props) {
         let match: RegExpExecArray | null;
 
         while ((match = regex.exec(text)) !== null) {
+            const preContext = text.substring(Math.max(0, match.index - 30), match.index);
+            const postContext = text.substring(regex.lastIndex, Math.min(text.length, regex.lastIndex + 30));
+            const context = `${preContext} ${postContext}`;
+
             if (match.index > lastIdx) {
                 const narration = text.substring(lastIdx, match.index).trim();
-                if (narration) segments.push({ text: narration, isDialogue: false, emotion: "calm" });
+                // 旁白部分：保持自然的叙述/沉稳基调（neutral / fluent），不生硬棒读
+                if (narration) segments.push({ text: narration, isDialogue: false, emotion: "neutral" });
             }
             const dialogue = match[1].replace(/^[“"「]|[”"」]$/g, "").trim();
             if (dialogue) {
-                // 情绪启发式推断（感叹号/疑问/特定情绪词）
-                let emotion = "happy";
-                if (/[！!]/.test(dialogue) || /(混蛋|可恶|找死|别管我)/.test(dialogue)) emotion = "angry";
-                else if (/(伤心|哭|难过|救救|叹气|唉)/.test(dialogue)) emotion = "sad";
-                else if (/[？\?]/.test(dialogue) || /(怎么会|居然|难道)/.test(dialogue)) emotion = "surprised";
-                else if (/(害怕|颤抖|恐惧)/.test(dialogue)) emotion = "fearful";
+                // 综合上下文动作描写（如：冷哼、颤抖、咆哮、哭着说、笑着说）与对话内容本身判断情绪
+                let emotion = "fluent";
+                if (/(怒|吼|咆哮|厉声|骂|瞪|咬牙|攥紧拳|拍桌|冷哼)/.test(context) || /[！!]/.test(dialogue) || /(混蛋|可恶|找死|闭嘴|滚)/.test(dialogue)) {
+                    emotion = "angry";
+                } else if (/(哭|泪|哽咽|抽泣|叹息|绝望|哀求|凄凉)/.test(context) || /(救救|难过|对不起|为什么会这样)/.test(dialogue)) {
+                    emotion = "sad";
+                } else if (/(惊|愕|愣|骇然|瞪大眼|倒吸|倒抽|难以置信)/.test(context) || /[？\?]/.test(dialogue) || /(怎么会|难道|怎么可能|什么)/.test(dialogue)) {
+                    emotion = "surprised";
+                } else if (/(颤|抖|害怕|惶恐|瑟瑟|退后|畏惧)/.test(context) || /(别过来|怕)/.test(dialogue)) {
+                    emotion = "fearful";
+                } else if (/(笑|乐|欣喜|调侃|打趣|勾起唇|挑眉)/.test(context) || /(太好了|哈哈|嘿嘿|真棒|好呀)/.test(dialogue)) {
+                    emotion = "happy";
+                }
                 segments.push({ text: dialogue, isDialogue: true, emotion });
             }
             lastIdx = regex.lastIndex;
@@ -581,13 +593,13 @@ export function ReadingViewer({ book, onBack }: Props) {
 
         if (lastIdx < text.length) {
             const rest = text.substring(lastIdx).trim();
-            if (rest) segments.push({ text: rest, isDialogue: false, emotion: "calm" });
+            if (rest) segments.push({ text: rest, isDialogue: false, emotion: "neutral" });
         }
 
         return segments;
     };
 
-    const startReadAloud = useCallback(async () => {
+    const startReadAloud = useCallback(async (startFromParagraphIndex = 0) => {
         if (!companionId) {
             alert("请先在右下角选择一位陪读角色！");
             return;
@@ -615,7 +627,10 @@ export function ReadingViewer({ book, onBack }: Props) {
 
         try {
             const paras = currentCh.paragraphs;
-            for (let pIdx = 0; pIdx < paras.length; pIdx++) {
+            // 预加载队列（减少段落与片段之间的停顿，无缝衔接）
+            let nextAudioPromise: Promise<Blob | null> | null = null;
+
+            for (let pIdx = Math.max(0, startFromParagraphIndex); pIdx < paras.length; pIdx++) {
                 if (!isReadingAloudRef.current) break;
                 const pText = paras[pIdx].trim();
                 if (!pText) continue;
@@ -623,17 +638,43 @@ export function ReadingViewer({ book, onBack }: Props) {
                 setAloudStatusText(`正在朗读 第${chapterIndex + 1}章 · 第${pIdx + 1}/${paras.length}段`);
 
                 const segments = parseParagraphSegments(pText);
-                for (const seg of segments) {
+                for (let sIdx = 0; sIdx < segments.length; sIdx++) {
                     if (!isReadingAloudRef.current) break;
+                    const seg = segments[sIdx];
                     if (!seg.text.trim()) continue;
 
-                    const audioBlob = await synthesizeSpeech(seg.text, voiceConfig, {
-                        emotion: seg.isDialogue ? seg.emotion : "calm"
-                    });
+                    // 准备当前片段音频
+                    let currentBlob: Blob | null = null;
+                    if (nextAudioPromise) {
+                        currentBlob = await nextAudioPromise;
+                        nextAudioPromise = null;
+                    } else {
+                        currentBlob = await synthesizeSpeech(seg.text, voiceConfig, {
+                            emotion: seg.isDialogue ? seg.emotion : "neutral"
+                        });
+                    }
 
                     if (!isReadingAloudRef.current) break;
-                    if (audioBlob) {
-                        const { promise, abort } = playAudioBlobViaMediaElement(audioBlob);
+
+                    // 立即预先加载下一片段（流水线预拉取，消除段间停顿）
+                    let nextSeg: typeof seg | undefined;
+                    if (sIdx + 1 < segments.length) {
+                        nextSeg = segments[sIdx + 1];
+                    } else if (pIdx + 1 < paras.length) {
+                        const nextPText = paras[pIdx + 1].trim();
+                        if (nextPText) {
+                            const nextParasSegs = parseParagraphSegments(nextPText);
+                            if (nextParasSegs.length > 0) nextSeg = nextParasSegs[0];
+                        }
+                    }
+                    if (nextSeg && nextSeg.text.trim()) {
+                        nextAudioPromise = synthesizeSpeech(nextSeg.text, voiceConfig, {
+                            emotion: nextSeg.isDialogue ? nextSeg.emotion : "neutral"
+                        }).catch(() => null);
+                    }
+
+                    if (currentBlob) {
+                        const { promise, abort } = playAudioBlobViaMediaElement(currentBlob);
                         aloudAbortRef.current = abort;
                         await promise;
                         aloudAbortRef.current = null;
