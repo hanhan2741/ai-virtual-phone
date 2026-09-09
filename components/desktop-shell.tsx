@@ -2274,6 +2274,8 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
   function activateCustomApp(appId: string, launchContext: Record<string, unknown> = {}): void {
     const iconId = toCustomAppIconId(appId);
     activeAppRef.current = iconId;
+    setActiveChatSession(null);
+    setChatInitSessionId(null);
     setCustomAppLaunchContext({
       appId,
       context: launchContext,
@@ -2334,7 +2336,12 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       return;
     }
     if (builtinIconId === "resources") setResourcesInitialPage("main");
-    if (builtinIconId === "chat") setChatInitSessionId(null);
+    if (builtinIconId === "chat") {
+      setChatInitSessionId(null);
+    } else {
+      setActiveChatSession(null);
+      setChatInitSessionId(null);
+    }
     setActiveApp(builtinIconId);
   }
 
@@ -2404,6 +2411,9 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
         setAppMarketLaunchContext(nextAppId === "appmarket" ? launchContextRecord : null);
         if (detail.appId === "resources") {
           setResourcesInitialPage(detail.resourcePage === "vn_assets" || detail.resourcePage === "memory" ? detail.resourcePage : "main");
+        }
+        if (nextAppId !== "chat") {
+          setActiveChatSession(null);
         }
         setActiveApp(nextAppId as DesktopIconId);
         if (detail.sessionId) setChatInitSessionId(detail.sessionId);
