@@ -250,12 +250,24 @@ async function historyToNativeMessages(history: MascotMsg[]): Promise<LlmRequest
                 out.push({ role: "user", content: m.text });
             }
         } else if (m.role === "tool") {
-            out.push({
-                role: "tool",
-                content: m.text,
-                name: m.toolName || "",
-                toolCallId: m.toolCallId || "",
-            });
+            // 严格检查：OpenAI/Gemini 规范要求 tool 响应前一个消息必须是包含该 toolCall 的 assistant 消息
+            // 若历史消息被截断导致孤立，则降级为 user 说明消息，避免上游 400 报错
+            const lastMsg = out[out.length - 1];
+            const hasMatchingCall = lastMsg?.role === "assistant" && Array.isArray(lastMsg.toolCalls) && lastMsg.toolCalls.some(tc => tc.id === m.toolCallId);
+            
+            if (hasMatchingCall || m.toolCallId) {
+                out.push({
+                    role: "tool",
+                    content: m.text,
+                    name: m.toolName || "",
+                    toolCallId: m.toolCallId || "",
+                });
+            } else {
+                out.push({
+                    role: "user",
+                    content: `[工具执行记录] ${m.toolDisplayName || m.toolName || "工具"}：${m.text}`,
+                });
+            }
             if (m.images && m.images.length > 0) {
                 out.push(await buildImageContextMessage(
                     `系统记录：这是工具「${m.toolDisplayName || m.toolName || "工具"}」刚才返回的图片。请结合图片判断后续是否需要继续裁切、去底、转换、上传或写 CSS。`,

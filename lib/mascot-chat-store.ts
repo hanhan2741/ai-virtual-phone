@@ -707,7 +707,12 @@ export async function generateMascotReply({
         }
     } catch (err) {
         if ((err as Error).name !== "AbortError" && !abortRequested) {
-            publishMessages([...workingMessages, { role: "mascot", text: `出错了...${(err as Error).message}`, createdAt: new Date().toISOString() }]);
+            const errMsg = (err as Error).message || "";
+            publishMessages([...workingMessages, {
+                role: "mascot",
+                text: `出错了...${errMsg}\n\n💡 提示：你可以直接再次在输入框提问或重试。`,
+                createdAt: new Date().toISOString()
+            }]);
             if (!isMascotPanelOpen() && typeof window !== "undefined") {
                 window.dispatchEvent(new CustomEvent("global-notice", { detail: "AI助手生成失败了..." }));
             }
