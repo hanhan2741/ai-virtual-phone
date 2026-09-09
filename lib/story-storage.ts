@@ -225,6 +225,17 @@ export function deleteStoryMessagesFrom(sessionId: string, messageId: string): v
     storyDb.messages.bulkDelete(idsToDelete).catch(() => undefined);
 }
 
+/** Clear all story messages for a session */
+export function clearStoryMessages(sessionId: string): void {
+    _messagesCache = _messagesCache.filter(m => m.sessionId !== sessionId);
+    storyDb.messages.where("sessionId").equals(sessionId).delete().catch(() => undefined);
+    updateStorySession(sessionId, {
+        lastMessageId: undefined,
+        lastMessagePreview: "",
+        updatedAt: new Date().toISOString(),
+    });
+}
+
 /** Edit a story message's rawContent (renderedContent will be rebuilt by cache invalidation) */
 export function editStoryMessage(messageId: string, newRawContent: string): void {
     const idx = _messagesCache.findIndex(m => m.id === messageId);

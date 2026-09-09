@@ -55,6 +55,7 @@ import {
   pushStoryMessage,
   deleteStoryMessage,
   deleteStoryMessagesFrom,
+  clearStoryMessages,
   editStoryMessage,
   type StoryMessage,
   type StorySession,
@@ -1011,6 +1012,20 @@ export function StoryApp({ onClose }: StoryAppProps) {
             }}
           >
             重建渲染缓存
+          </button>
+          <button
+            className="story-tool-btn"
+            style={{ marginTop: 8, color: "var(--c-danger, #e53e3e)" }}
+            onClick={() => {
+              if (window.confirm("确定要清空当前角色的全部剧情记录并重新开始吗？此操作不可恢复。")) {
+                clearStoryMessages(currentSession.id);
+                setMessages([]);
+                setStorageVersion((value) => value + 1);
+                setDrawerOpen(false);
+              }
+            }}
+          >
+            清空本剧情并重新开始
           </button>
         </div>
       </aside>
