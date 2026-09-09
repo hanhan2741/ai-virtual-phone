@@ -2482,7 +2482,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     continue;
                 }
                 if (part.mediaType === "group_admin_notice") {
-                    if (!isFirst && !revealOptions?.instantReveal) await abortableDelay(800, guard?.signal);
+                    if (!isFirst) await abortableDelay(900, guard?.signal);
                     throwIfGenerationStopped(guard);
                     const applied = applyAIGroupAdminAction(r.characterId, part.mediaData);
                     if (!applied) continue; // 无权限/名字不合法：整个标签静默丢弃
@@ -2510,7 +2510,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 if (part.mediaType === "poke") {
                     const pokeSender = (part.mediaData?.pokeSender === "我" ? r.characterName : part.mediaData?.pokeSender) || r.characterName;
                     const pokeTarget = part.mediaData?.pokeTarget || "某人";
-                    if (!isFirst && !revealOptions?.instantReveal) await abortableDelay(800, guard?.signal);
+                    if (!isFirst) await abortableDelay(900, guard?.signal);
                     throwIfGenerationStopped(guard);
                     isFirst = false;
                     const msg = pushChatMessage({
@@ -2536,7 +2536,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     });
                     continue;
                 }
-                if (!isFirst && !revealOptions?.instantReveal) await abortableDelay(800, guard?.signal);
+                if (!isFirst) {
+                    const charLen = (part.content || "").trim().length;
+                    const staggerMs = part.mediaType && part.mediaType !== "image"
+                        ? 1100
+                        : Math.min(2800, Math.max(1000, 900 + charLen * 35));
+                    await abortableDelay(staggerMs, guard?.signal);
+                }
                 throwIfGenerationStopped(guard);
                 isFirst = false;
                 const attachHere = !attachedState && canCarryFoldedPanel(part);
@@ -2987,13 +2993,18 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         };
 
         // Display messages one by one with staggered delays; update preview and notice with the same rhythm.
-        // 流式预览已经按段展示过一遍时（instantReveal）直接全部放出，避免二次「重播」。
-        if (messageDrafts.length <= 1 || options?.instantReveal) {
+        if (messageDrafts.length <= 1) {
             messageDrafts.forEach(publishVisibleMessage);
         } else {
             publishVisibleMessage(messageDrafts[0]);
             for (let i = 1; i < messageDrafts.length; i++) {
-                await abortableDelay(800, options?.signal);
+                const nextDraft = messageDrafts[i].draft;
+                const charLen = (nextDraft.content || "").trim().length;
+                // 拟真微信打字节奏：基础间隔 900ms + 每字 35ms 递增，区间 1000ms~2800ms
+                const staggerMs = nextDraft.mediaType && nextDraft.mediaType !== "image"
+                    ? 1100
+                    : Math.min(2800, Math.max(1000, 900 + charLen * 35));
+                await abortableDelay(staggerMs, options?.signal);
                 throwIfGenerationStopped(options);
                 publishVisibleMessage(messageDrafts[i]);
             }
