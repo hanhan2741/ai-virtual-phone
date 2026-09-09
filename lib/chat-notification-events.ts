@@ -9,10 +9,13 @@ export type ChatMessageNoticeDetail = {
   isGroup?: boolean;
 };
 
+import { playMessageSound } from "./chat-sound";
+
 export function dispatchChatMessageNotice(detail: ChatMessageNoticeDetail): void {
   if (typeof window === "undefined") return;
   const body = detail.body.trim();
   if (!detail.sessionId || !body) return;
+  playMessageSound();
   window.dispatchEvent(new CustomEvent(CHAT_MESSAGE_NOTICE_EVENT, {
     detail: { ...detail, body },
   }));
