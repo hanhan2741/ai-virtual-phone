@@ -384,6 +384,9 @@ async function saveBackgroundCompletionRounds(
             stateValues = result.stateValues;
         }
     }
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId } }));
+    }
     return { hasVisible, newCount, stateValues };
 }
 
