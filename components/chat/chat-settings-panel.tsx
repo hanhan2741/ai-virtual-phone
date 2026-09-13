@@ -511,6 +511,8 @@ export function ChatSettingsPanel({
     };
 
     const [groupName, setGroupName] = useState(session.groupName || "");
+    const [contactAvatarOverride, setContactAvatarOverride] = useState(session.contactAvatarOverride || "");
+    const [avatarChangeReaction, setAvatarChangeReaction] = useState(session.avatarChangeReaction !== false);
 
     const characters = loadCharacters();
     const character = characters.find(c => c.id === session.contactId);
@@ -690,6 +692,13 @@ export function ChatSettingsPanel({
             const id = await saveChatImageToIndexedDB(file);
             setter(id);
             updateSession({ [key]: id });
+            if (key === "contactAvatarOverride" && avatarChangeReaction && !session.isGroup) {
+                pushChatMessage({
+                    sessionId: session.id,
+                    role: "system",
+                    content: `[系统动作提示：对方（${characterName}）更换了头像。你可以根据人设与当前语境，决定是否在回复中自然地提及或打趣这位朋友的新头像。这不是硬性要求，如果没有合适切入点则无需强行提及。]`,
+                });
+            }
         } catch (error) {
             console.error("Failed to save image", error);
             alert("图片保存失败，请重试");
@@ -1138,6 +1147,60 @@ export function ChatSettingsPanel({
 
                 {/* Backgrounds & UI */}
                 <div className="menu-group">
+                    <div className="menu-item">
+                        <ChatInfoIcon icon={User} color={BINDING_ACCENTS.preset} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">角色会话头像</span>
+                            <span className="menu-desc">仅本会话覆盖，不影响原角色卡</span>
+                        </div>
+                        <div className="menu-right" style={{ gap: 8 }}>
+                            {contactAvatarOverride && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setContactAvatarOverride("");
+                                        updateSession({ contactAvatarOverride: undefined });
+                                    }}
+                                    className="ui-bare-btn text-[var(--c-danger)] ts-12"
+                                >
+                                    清除
+                                </button>
+                            )}
+                            <label className="cursor-pointer" style={{ display: "flex" }}>
+                                <div className="w-[28px] h-[28px] rounded-full overflow-hidden bg-[var(--c-page-body-bg)] flex items-center justify-center border border-[var(--c-border)]">
+                                    {contactAvatarOverride ? (
+                                        <img src={contactAvatarOverride} alt="Override Avatar" className="w-full h-full object-cover" />
+                                    ) : character?.avatar ? (
+                                        <img src={character.avatar} alt="Original Avatar" className="w-full h-full object-cover opacity-60" />
+                                    ) : (
+                                        <ChatFallbackAvatar />
+                                    )}
+                                </div>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => handleImageUpload(e, setContactAvatarOverride, "contactAvatarOverride" as keyof ChatSession)}
+                                />
+                            </label>
+                            <ChevronRight size={16} />
+                        </div>
+                    </div>
+                    <label className="menu-item toggle-row">
+                        <ChatInfoIcon icon={Sparkles} color={BINDING_ACCENTS.preset} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">换头像后角色反应</span>
+                            <span className="menu-desc">双方换头像时注入系统提示，角色可感知并回应</span>
+                        </div>
+                        <Toggle
+                            checked={avatarChangeReaction}
+                            onChange={(checked) => {
+                                setAvatarChangeReaction(checked);
+                                updateSession({ avatarChangeReaction: checked });
+                            }}
+                        />
+                    </label>
+
                     <label className="menu-item">
                         <ChatInfoIcon icon={ImageIcon} color={BINDING_ACCENTS.api} />
                         <div className="menu-label-group"><span className="menu-label">聊天背景</span></div>

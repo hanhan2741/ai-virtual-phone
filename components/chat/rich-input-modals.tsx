@@ -321,6 +321,53 @@ export function SystemInstructionModal({ onSend, onClose }: SystemInstructionMod
     );
 }
 
+// ── Change Avatar Modal ─────────────────────────────
+
+interface ChangeAvatarModalProps {
+    onSend: (imageDataUrl: string) => void;
+    onClose: () => void;
+}
+
+export function ChangeAvatarModal({ onSend, onClose }: ChangeAvatarModalProps) {
+    const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => setImageDataUrl(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const canSend = !!imageDataUrl;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div onClick={e => e.stopPropagation()} className="modal-dialog">
+                <div className="ts-16 font-semibold text-center text-[var(--c-text)]">暗示对方换头像</div>
+                <div className="w-full rounded-xl flex items-center justify-center ui-placeholder-gradient overflow-hidden cursor-pointer relative"
+                    style={{ minHeight: imageDataUrl ? "auto" : "120px" }}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    {imageDataUrl ? (
+                        <img src={imageDataUrl} alt="preview" className="w-[120px] h-[120px] rounded-full object-cover" />
+                    ) : (
+                        <div className="flex flex-col items-center gap-2 py-6">
+                            <span className="ts-12 text-[var(--c-icon)]">点击选择要让对方换上的新头像</span>
+                        </div>
+                    )}
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                </div>
+                <div className="flex gap-3 w-full">
+                    <button onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">取消</button>
+                    <button onClick={() => { if (canSend) onSend(imageDataUrl!); }} disabled={!canSend} className="ui-btn ui-btn-success flex-1">发送暗示</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Voice Record Modal ─────────────────────────────
 
 interface VoiceRecordModalProps {

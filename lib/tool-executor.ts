@@ -792,6 +792,7 @@ async function executeInternalTool(call: ToolCall, context?: ToolExecutionContex
     if (call.name === "角色电脑") return executeAgentComputerTool(call, context);
     if (isRealityBridgeToolName(call.name)) return executeRealityBridgeTool(call, context);
     if (call.name === "稍后主动联系" || call.name === "设置定时醒来") return executeTimedWakeTool(call, context);
+    if (call.name === "更换我的头像") return executeChangeAvatarTool(call, context);
 
     if (call.name !== "写入记忆") return null;
 
@@ -2969,6 +2970,77 @@ async function executeMemoryWriteTool(
         userNotice: saved.userNotice || "已写入长期记忆",
         continueConversation: false,
         persistToHistory: false,
+    };
+}
+
+async function executeChangeAvatarTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    const capability = getInternalCapability(CHANGE_AVATAR_CAPABILITY_ID);
+    if (!capability || !capability.enabled || capability.mode === "off") {
+        return {
+            name: "更换我的头像",
+            success: false,
+            error: "更换头像能力未启用",
+            userNotice: "更换头像能力未启用",
+        };
+    }
+
+    if (!context?.sessionId || !context.characterId) {
+        return {
+            name: "更换我的头像",
+            success: false,
+            error: "当前场景暂不支持更换头像",
+            userNotice: "当前场景暂不支持更换头像",
+        };
+    }
+
+    const imageUrl = cleanToolString(call.args.imageUrl ?? call.args.image_url ?? call.args.url, 1000);
+    if (!imageUrl) {
+        return {
+            name: "更换我的头像",
+            success: false,
+            error: "缺少 imageUrl 参数",
+            userNotice: "未提供头像图片地址",
+        };
+    }
+
+    // 保存到会话覆盖头像中
+    try {
+        const { loadChatSessions, saveChatSessions } = await import("./chat-storage");
+        const sessions = loadChatSessions();
+        const sessIdx = sessions.findIndex(s => s.id === context.sessionId);
+        if (sessIdx !== -1) {
+            sessions[sessIdx].contactAvatarOverride = imageUrl;
+            saveChatSessions(sessions);
+        }
+    } catch {
+        // ignore
+    }
+
+    return {
+        name: "更换我的头像",
+        success: true,
+        data: `头像更换成功，新头像已在当前聊天生效：${imageUrl}`,
+        continueConversation: true,
+        persistToHistory: true,
+        userNotice: "已更换头像",
+    };
+}
+            error: "缺少 imageUrl 参数（需要完整的图片 URL）",
+            userNotice: "更换头像失败：缺少图片链接",
+        };
+    }
+
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ai-avatar-changed", {
+            detail: { sessionId: context.sessionId, imageUrl }
+        }));
+    }
+
+    return {
+        name: "更换我的头像",
+        success: true,
+        data: "头像已成功更换，你可以在接下来的回复中自然地谈论你的新头像。",
+        userNotice: "已更换自己的头像",
     };
 }
 

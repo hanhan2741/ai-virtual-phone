@@ -233,6 +233,7 @@ export function UserIdentitySettings() {
                                                         try {
                                                             const dataUrl = await fileToDataUrl(file);
                                                             updateIdentity(identity.id, { avatarUrl: dataUrl });
+                                                            window.dispatchEvent(new CustomEvent("user-avatar-changed", { detail: { identityId: identity.id } }));
                                                         } catch { /* ignore */ }
                                                     };
                                                     input.click();

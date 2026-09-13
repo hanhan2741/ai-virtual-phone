@@ -15,6 +15,7 @@ export const AGENT_COMPUTER_CAPABILITY_ID = "agent_computer";
 export const LOCAL_DATA_LIBRARY_CAPABILITY_ID = "local_data_library";
 export const TOOLBOX_MANAGEMENT_CAPABILITY_ID = "toolbox_management";
 export const TIMED_WAKE_CAPABILITY_ID = "timed_wake";
+export const CHANGE_AVATAR_CAPABILITY_ID = "change_avatar";
 export const REALITY_BRIDGE_CAPABILITY_ID = "reality_bridge_send";
 
 export type InternalToolDefinition = {
@@ -115,6 +116,30 @@ const TIMED_WAKE_USAGE_GUIDE = [
     "示例：",
     '[执行动作:稍后主动联系({"delayMinutes":6,"intent":"下楼拿到黄焖鸡了，拍张正宗黄焖鸡照片发给对方看看"})]',
     '[执行动作:稍后主动联系({"delayMinutes":90,"intent":"和朋友吃完火锅逛完街了，找对方聊聊刚才好玩的事"})]',
+].join("\n");
+
+const CHANGE_AVATAR_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {
+        imageUrl: { type: "string", description: "想要换成的新头像图片 URL（可以是通过生图工具刚画好的，也可以是外部直链）" },
+    },
+    required: ["imageUrl"],
+});
+
+const CHANGE_AVATAR_USAGE_GUIDE = [
+    "以下是你获取指令的返回结果：",
+    "动作：更换我的头像",
+    "用途：更换你在当前聊天里的显示头像。",
+    "",
+    "参数：",
+    "- imageUrl (string): 想要换成的新头像的 URL。如果你刚用生图工具画了一张图，直接填入那张图的 URL 即可。",
+    "",
+    "使用规则：",
+    "- 只有当剧情发展自然、或对方明确建议/暗示你换头像，且你（基于人设）愿意换时才使用。",
+    "- 换完后会在聊天中产生系统提示，你可以顺着新头像继续和对方聊天。",
+    "",
+    "示例：",
+    '[执行动作:更换我的头像({"imageUrl":"https://example.com/new_avatar.jpg"})]',
 ].join("\n");
 
 const NOTE_WALL_USAGE_GUIDE = [
@@ -1270,6 +1295,15 @@ const BUILTIN_INTERNAL_CAPABILITIES: InternalCapabilityConfig[] = [
         createdAt: 0,
         updatedAt: 0,
     },
+    {
+        id: CHANGE_AVATAR_CAPABILITY_ID,
+        name: "更换我的头像",
+        description: "让角色能在聊天中主动更换自己的头像（会话级覆盖），常与生图能力配合使用。",
+        enabled: true,
+        mode: "auto",
+        createdAt: 0,
+        updatedAt: 0,
+    },
 ];
 
 export function loadInternalCapabilities(): InternalCapabilityConfig[] {
@@ -1373,6 +1407,14 @@ export function getInternalCapabilityToolDefinition(capability: InternalCapabili
             description: capability.description,
             parameterSchema: TIMED_WAKE_PARAMETER_SCHEMA,
             usageGuide: TIMED_WAKE_USAGE_GUIDE,
+        };
+    }
+    if (capability.id === CHANGE_AVATAR_CAPABILITY_ID) {
+        return {
+            name: capability.name,
+            description: capability.description,
+            parameterSchema: CHANGE_AVATAR_PARAMETER_SCHEMA,
+            usageGuide: CHANGE_AVATAR_USAGE_GUIDE,
         };
     }
     if (capability.id === REALITY_BRIDGE_CAPABILITY_ID) {
