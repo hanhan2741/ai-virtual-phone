@@ -1947,6 +1947,11 @@ export async function buildChatPromptMessages(
             role: "system",
             content: "本次自定义 APP AI 任务只输出严格 JSON。不要输出 Markdown 代码块、解释文字或聊天富媒体指令。",
         });
+    } else if (effectiveAppTags?.includes("voice")) {
+        llmMessages.push({
+            role: "system",
+            content: "【实时语音通话交互规范】：当前处于双向语音通话中。由于语音转写（STT）可能存在同音错字、断句零碎或吞字现象，请直接包容并结合人设推断用户的本意自然接话；禁止以“刚刚不是…现在怎么…”等句式挑刺、反问、纠错或质问用户前后矛盾与话题跳跃，直接顺着最新一句话自然交流。",
+        });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
 
