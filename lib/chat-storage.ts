@@ -61,6 +61,10 @@ export type ChatSession = {
     streamOnline?: boolean;
     /** 流式生成（线下）：开启后该会话的线下 AI 回复边生成边显示（默认关，保持原整段请求行为） */
     streamOffline?: boolean;
+    /** 会话级角色头像覆盖（不改角色卡本体，仅本会话聊天气泡显示用） */
+    contactAvatarOverride?: string;
+    /** 换头像后角色反应：开启后用户或角色更换头像时注入系统事件提示，角色可感知并回应 */
+    avatarChangeReaction?: boolean;
     // Group chat fields
     isGroup?: boolean;
     groupName?: string;

@@ -10,7 +10,7 @@ import { isKnownStickerLabel } from "@/lib/sticker-data";
 import { translateReasoningText } from "@/lib/reasoning-translate";
 import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
-import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal } from "./rich-input-modals";
+import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal, ChangeAvatarModal } from "./rich-input-modals";
 import { EmojiPanel, StickerPanel } from "./emoji-panel";
 import { StickerSearchSuggest } from "./sticker-search-suggest";
 import { StateValuesPanel } from "./state-values-panel";
@@ -488,7 +488,7 @@ type PendingMessageJump = {
 };
 
 const TRANSIENT_MESSAGE_PREFIX = "ui-transient-";
-type RichModalKind = "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction";
+type RichModalKind = "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction" | "change_avatar";
 type ChatTextInputHandle = {
     appendText: (text: string, options?: { focus?: boolean }) => void;
     clear: () => void;
@@ -719,6 +719,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     );
     const suggestEnabled = !inputLocked && !panelOpen && !suggestClosed && inputText.trim().length > 0;
     const plusMenuItems = [
+        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>, label: "换头像", onClick: () => onOpenRichModal("change_avatar") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>, label: "照片墙", onClick: () => onOpenRichModal("photo") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="7" y1="8" x2="17" y2="8" /><line x1="7" y1="12" x2="14" y2="12" /><line x1="7" y1="16" x2="11" y2="16" /></svg>, label: "文字图片", onClick: () => onOpenRichModal("text_photo") },
         { icon: <AlertCircle size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "系统指令", onClick: () => onOpenRichModal("system_instruction") },
@@ -1165,6 +1166,27 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     useEffect(() => {
         emitChatPluginEvent("session.opened", { sessionId: session.id, isGroup: !!session.isGroup });
     }, [session.id, session.isGroup]);
+
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ identityId?: string }>).detail;
+            if (detail?.identityId && userIdentity?.id === detail.identityId) {
+                // 当前正使用的身份换了头像，触发重载以更新界面上显示的用户头像
+                setUserIdentity(resolveUserIdentity(session.contactId, session.isGroup ? "group_chat" : "chat"));
+                // 仅单聊支持「换头像后角色反应」
+                if (!session.isGroup && session.avatarChangeReaction !== false) {
+                    const sysMsg = pushChatMessage({
+                        sessionId: session.id,
+                        role: "system",
+                        content: `[系统动作提示：你刚才更换了你的头像。如果合适的话，角色可能会在接下来的对话中自然地提及或注意到了你的新头像；如果没有合适切入点则不作反应。]`,
+                    });
+                    setMessages(prev => [...prev, sysMsg]);
+                }
+            }
+        };
+        window.addEventListener("user-avatar-changed", handler);
+        return () => window.removeEventListener("user-avatar-changed", handler);
+    }, [session.id, session.isGroup, session.contactId, session.avatarChangeReaction, userIdentity?.id]);
 
     // 聊天插件：监听插件 toast（支持常驻加载态 + 手动关闭）
     const chatToastIdRef = useRef<string | null>(null);
@@ -3443,6 +3465,19 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 content: `${pokeSender} 拍了拍 ${pokeTarget}`,
                 mediaType: "poke",
                 mediaData: { pokeSender, pokeTarget },
+            });
+            setMessages(prev => [...prev, sysMsg]);
+            setPendingGenerate(true);
+            return true;
+        }
+
+        if (mediaType === "system_instruction" && mediaData?.label === "change_avatar") {
+            const sysMsg = pushChatMessage({
+                sessionId: session.id,
+                role: "system",
+                content: `[系统动作提示：你向对方发送了一张新头像，暗示或要求对方将自己的头像换成这张。]`,
+                mediaType: "system_instruction",
+                mediaUrl: mediaUrl,
             });
             setMessages(prev => [...prev, sysMsg]);
             setPendingGenerate(true);
@@ -5980,8 +6015,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                             ? groupCharMap.get(msg.senderCharacterId) || character
                                                             : character;
                                                         if (targetChar) sendRichMessage("poke", { pokeTarget: targetChar.name });
-                                                    }} className="w-[40px] h-[40px] rounded-[20px] bg-[var(--c-input)] overflow-hidden cursor-pointer">
-                                                        {senderChar?.avatar ? (
+                                                    }} className="w-[40px] h-[40px] rounded-[20px] bg-[var(--c-input)] overflow-hidden cursor-pointer border border-[var(--c-border)]">
+                                                        {(!session.isGroup && session.contactAvatarOverride) ? (
+                                                            <img src={session.contactAvatarOverride} className="w-full h-full object-cover" alt="" />
+                                                        ) : senderChar?.avatar ? (
                                                             <img src={senderChar.avatar} className="w-full h-full object-cover" alt="" />
                                                         ) : (
                                                             <ChatFallbackAvatar />
@@ -6490,6 +6527,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onSend={(text) => {
                         const sent = sendSystemInstruction(text);
                         if (sent) setRichModal(null);
+                    }}
+                    onClose={() => setRichModal(null)}
+                />
+            )}
+            {richModal === "change_avatar" && (
+                <ChangeAvatarModal
+                    onSend={(imageDataUrl) => {
+                        setRichModal(null);
+                        sendRichMessage("system_instruction", { label: "change_avatar" }, "", imageDataUrl);
                     }}
                     onClose={() => setRichModal(null)}
                 />
