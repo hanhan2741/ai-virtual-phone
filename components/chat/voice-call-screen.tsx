@@ -411,7 +411,11 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const subtitleId = `ai-${Date.now()}`;
             setSubtitles(prev => [...prev, { id: subtitleId, role: "assistant", text: displayText }]);
 
-            // 6. TTS
+            // 6. TTS 播放期间确保麦克风完全停止监听，杜绝自收自录
+            if (sttRef.current) {
+                sttRef.current.abort();
+                sttRef.current = null;
+            }
             setCallState("AI_SPEAKING");
 
             const voiceConfig = resolveVoiceConfig(session.contactId);
@@ -441,7 +445,12 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             }
 
             if (stateRef.current !== "ENDED") {
-                setCallState("IDLE");
+                // 音频读完后，留出 800ms 缓冲防扬声器余音串入，再恢复麦克风监听状态
+                setTimeout(() => {
+                    if (stateRef.current !== "ENDED") {
+                        setCallState("IDLE");
+                    }
+                }, 800);
             }
         } catch (error: any) {
             console.error("[VoiceCall] Error:", error);
