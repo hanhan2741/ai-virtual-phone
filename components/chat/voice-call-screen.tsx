@@ -411,11 +411,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             const subtitleId = `ai-${Date.now()}`;
             setSubtitles(prev => [...prev, { id: subtitleId, role: "assistant", text: displayText }]);
 
-            // 6. TTS 播放期间确保麦克风完全停止监听，杜绝自收自录
-            if (sttRef.current) {
-                sttRef.current.abort();
-                sttRef.current = null;
-            }
+            // 6. TTS
             setCallState("AI_SPEAKING");
 
             const voiceConfig = resolveVoiceConfig(session.contactId);
@@ -434,7 +430,10 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 artwork: character.avatar ? [{ src: character.avatar, sizes: "512x512", type: "image/png" }] : [],
                             });
                         }
-                        const { promise, abort } = playCallAudio(audioBlob);
+                        // 无论 iOS 还是安卓，哄睡模式与普通通话播放统一走原生媒体元素（HTML5 Audio），
+                        // 支持锁屏/息屏后台持续播放，且支持物理音量按键调节。
+                        const playbackFn = playAudioBlobViaMediaElement;
+                        const { promise, abort } = playbackFn(audioBlob);
                         audioAbortRef.current = abort;
                         await promise;
                         audioAbortRef.current = null;
@@ -445,12 +444,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
             }
 
             if (stateRef.current !== "ENDED") {
-                // 音频读完后，留出 800ms 缓冲防扬声器余音串入，再恢复麦克风监听状态
-                setTimeout(() => {
-                    if (stateRef.current !== "ENDED") {
-                        setCallState("IDLE");
-                    }
-                }, 800);
+                setCallState("IDLE");
             }
         } catch (error: any) {
             console.error("[VoiceCall] Error:", error);
