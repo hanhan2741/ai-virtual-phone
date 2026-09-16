@@ -124,35 +124,50 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
         return () => { resumeKeepAliveAfterCall(); };
     }, []);
 
-    // 1. 屏幕常亮保活（Screen WakeLock）：防止通话/哄睡长篇播放时手机自动变暗熄屏
+    // 1. 屏幕常亮保活（Screen WakeLock）：仅在通话中（非 ENDED）保持常亮，通话挂断或组件卸载立刻释放
+    const wakeLockRef = useRef<any>(null);
     useEffect(() => {
-        let wakeLock: any = null;
+        const releaseWakeLock = () => {
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release().catch(() => {});
+                wakeLockRef.current = null;
+            }
+        };
+
         const requestWakeLock = async () => {
+            if (callState === "ENDED") {
+                releaseWakeLock();
+                return;
+            }
             try {
-                if ("wakeLock" in navigator && (navigator as any).wakeLock) {
-                    wakeLock = await (navigator as any).wakeLock.request("screen");
+                if ("wakeLock" in navigator && (navigator as any).wakeLock && !wakeLockRef.current) {
+                    wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
                 }
             } catch (err) {
                 console.log("[VoiceCall] WakeLock error:", err);
             }
         };
-        void requestWakeLock();
+
+        if (callState !== "ENDED") {
+            void requestWakeLock();
+        } else {
+            releaseWakeLock();
+        }
 
         const handleVisibility = () => {
             if (document.visibilityState === "visible" && stateRef.current !== "ENDED") {
                 void requestWakeLock();
+            } else if (stateRef.current === "ENDED") {
+                releaseWakeLock();
             }
         };
         document.addEventListener("visibilitychange", handleVisibility);
 
         return () => {
             document.removeEventListener("visibilitychange", handleVisibility);
-            if (wakeLock) {
-                wakeLock.release().catch(() => {});
-                wakeLock = null;
-            }
+            releaseWakeLock();
         };
-    }, []);
+    }, [callState]);
 
     // 2. 通话期间周期性取消后台追问/冷场预约，防止通话中途服务端/本地后台误发消息
     useEffect(() => {
@@ -430,10 +445,7 @@ export function VoiceCallScreen({ session, character, onEnd, onConnect, initiato
                                 artwork: character.avatar ? [{ src: character.avatar, sizes: "512x512", type: "image/png" }] : [],
                             });
                         }
-                        // 无论 iOS 还是安卓，哄睡模式与普通通话播放统一走原生媒体元素（HTML5 Audio），
-                        // 支持锁屏/息屏后台持续播放，且支持物理音量按键调节。
-                        const playbackFn = playAudioBlobViaMediaElement;
-                        const { promise, abort } = playbackFn(audioBlob);
+                        const { promise, abort } = playCallAudio(audioBlob);
                         audioAbortRef.current = abort;
                         await promise;
                         audioAbortRef.current = null;
